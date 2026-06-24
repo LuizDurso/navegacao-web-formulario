@@ -2,10 +2,23 @@
 
 figma.showUI(__html__, { width: 420, height: 392 });
 
-// --- Util: lista frames da página (recursivo, inclui dentro de Sections/Groups) ---
+// Tipos de nó que podem ser origem/destino de uma interação de protótipo
+const NAV_TYPES = ["FRAME", "COMPONENT", "COMPONENT_SET", "INSTANCE"];
+
+const TYPE_LABEL = {
+  FRAME: "", COMPONENT: " ◆", COMPONENT_SET: " ◆◆", INSTANCE: " ◇",
+};
+
+// --- Util: lista frames/componentes da página (recursivo, inclui filhos) ---
 function getFrames() {
-  const frames = figma.currentPage.findAllWithCriteria({ types: ["FRAME"] });
-  return frames.map(n => ({ id: n.id, name: n.name, depth: getDepth(n) }));
+  const nodes = figma.currentPage.findAllWithCriteria({ types: NAV_TYPES });
+  return nodes.map(n => ({
+    id: n.id,
+    name: n.name + (TYPE_LABEL[n.type] || ""),
+    rawName: n.name,
+    type: n.type,
+    depth: getDepth(n),
+  }));
 }
 
 function getDepth(node) {
@@ -20,7 +33,7 @@ function getDepth(node) {
 
 function getSelectedFrames() {
   return figma.currentPage.selection
-    .filter(n => n.type === "FRAME")
+    .filter(n => NAV_TYPES.includes(n.type))
     .map(n => ({ id: n.id, name: n.name }));
 }
 
@@ -54,13 +67,13 @@ figma.ui.onmessage = async (msg) => {
       const { sourceId, destinationId, keyCodes, transition } = msg;
 
       const sourceNode = await figma.getNodeByIdAsync(sourceId);
-      if (!sourceNode || sourceNode.type !== "FRAME") {
-        figma.ui.postMessage({ type: "ERROR", message: "Frame de origem não encontrado." });
+      if (!sourceNode || !NAV_TYPES.includes(sourceNode.type)) {
+        figma.ui.postMessage({ type: "ERROR", message: "Origem não encontrada ou tipo inválido." });
         return;
       }
       const destNode = await figma.getNodeByIdAsync(destinationId);
-      if (!destNode || destNode.type !== "FRAME") {
-        figma.ui.postMessage({ type: "ERROR", message: "Frame de destino não encontrado." });
+      if (!destNode || !NAV_TYPES.includes(destNode.type)) {
+        figma.ui.postMessage({ type: "ERROR", message: "Destino não encontrado ou tipo inválido." });
         return;
       }
 
@@ -99,8 +112,8 @@ figma.ui.onmessage = async (msg) => {
   if (msg.type === "CLEAR_KEY_INTERACTIONS") {
     try {
       const sourceNode = await figma.getNodeByIdAsync(msg.sourceId);
-      if (!sourceNode || sourceNode.type !== "FRAME") {
-        figma.ui.postMessage({ type: "ERROR", message: "Frame não encontrado." });
+      if (!sourceNode || !NAV_TYPES.includes(sourceNode.type)) {
+        figma.ui.postMessage({ type: "ERROR", message: "Nó não encontrado ou tipo inválido." });
         return;
       }
       const existing = sourceNode.reactions || [];
